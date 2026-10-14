@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="referrer" content="no-referrer">
+  <meta name="theme-color" content="#000000">
+  <title>18gram - 18+ Reels</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220%22%20100%20100%22><text y=%22.9em%22 font-size=%2290%22>🔞</text></svg>">
+  <link rel="stylesheet" href="style.css">
+  <!-- Lucide Icons -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+</head>
+<body>
+  <!-- 18+ Age Verification Modal -->
+  <div id="age-gate" class="modal-backdrop">
+    <div class="modal-card">
+      <div class="modal-icon">🔞</div>
+      <h2>Age Verification Required</h2>
+      <p>This web application aggregates 18+ adult short-form reels. You must be at least 18 years old (or the age of legal majority in your jurisdiction) to proceed.</p>
+      <div class="modal-actions">
+        <button id="btn-enter-age" class="btn-primary">I am 18 or older &mdash; Enter</button>
+        <button id="btn-exit-age" class="btn-secondary">Exit</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Search Modal -->
+  <div id="search-modal" class="modal-backdrop hidden">
+    <div class="search-card">
+      <div class="search-header">
+        <h3>Discover Reels</h3>
+        <button id="btn-close-search" class="icon-btn-round" aria-label="Close search"><i data-lucide="x"></i></button>
+      </div>
+      <form id="search-form" class="search-input-box">
+        <i data-lucide="search" class="search-icon-inside"></i>
+        <input type="text" id="search-input" placeholder="Search creators, tags, trends..." autocomplete="off">
+        <button type="submit" class="btn-search-go">Search</button>
+      </form>
+      <div class="quick-tags-container">
+        <span class="quick-tags-title">Popular Tags:</span>
+        <div class="quick-tags-list">
+          <button class="quick-tag" data-tag="dance">🎵 Dance</button>
+          <button class="quick-tag" data-tag="amateur">💃 Amateur</button>
+          <button class="quick-tag" data-tag="cosplay">🎭 Cosplay</button>
+          <button class="quick-tag" data-tag="bikini">👙 Bikini</button>
+          <button class="quick-tag" data-tag="latina">🔥 Latina</button>
+          <button class="quick-tag" data-tag="asian">🌸 Asian</button>
+          <button class="quick-tag" data-tag="fitness">💪 Fitness</button>
+          <button class="quick-tag" data-tag="ebony">✨ Ebony</button>
+          <button class="quick-tag" data-tag="goth">🖤 Goth</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Overall Desktop / Mobile Wrapper -->
+  <div class="master-container">
+    
+    <!-- Desktop Left Sidebar (Visible on screens >= 900px) -->
+    <aside class="desktop-sidebar">
+      <div class="sidebar-header">
+        <div class="brand">
+          <span class="brand-gradient">18gram</span>
+          <span class="badge-tag">18+</span>
+        </div>
+        <p class="sidebar-tagline">Infinite Adult Reels Feed</p>
+      </div>
+
+      <!-- Quick Desktop Search -->
+      <div class="sidebar-search">
+        <form id="desktop-search-form" class="sidebar-search-box">
+          <i data-lucide="search"></i>
+          <input type="text" id="desktop-search-input" placeholder="Search reels, tags..." autocomplete="off">
+        </form>
+      </div>
+
+      <!-- Navigation Feed Modes -->
+      <nav class="sidebar-nav">
+        <button class="nav-item active" data-nav="for-you" id="nav-for-you">
+          <i data-lucide="flame"></i>
+          <span>For You / Trending</span>
+        </button>
+        <button class="nav-item" data-nav="pornhub" id="nav-pornhub">
+          <i data-lucide="play-square"></i>
+          <span>Pornhub Shorties</span>
+        </button>
+        <button class="nav-item" data-nav="saved" id="nav-saved">
+          <i data-lucide="bookmark"></i>
+          <span>Saved Collection</span>
+          <span id="sidebar-saved-count" class="count-badge">0</span>
+        </button>
+      </nav>
+
+      <!-- Niches / Categories Section -->
+      <div class="sidebar-section">
+        <div class="section-title">Categories</div>
+        <div id="sidebar-niches" class="sidebar-niches-list">
+          <!-- Populated dynamically via JS -->
+        </div>
+      </div>
+
+      <!-- Desktop Audio & Mode Controls -->
+      <div class="sidebar-footer">
+        <button id="sidebar-sound-btn" class="sidebar-control-card">
+          <div class="control-icon"><i data-lucide="volume-x" id="sidebar-sound-icon"></i></div>
+          <div class="control-text">
+            <span class="control-title">Master Audio</span>
+            <span class="control-sub" id="sidebar-sound-status">Muted</span>
+          </div>
+        </button>
+      </div>
+    </aside>
+
+    <!-- Center Phone / Reels Viewport -->
+    <main class="app-layout">
+      <!-- Ambient Glow Behind Reel -->
+      <div id="ambient-player-glow" class="ambient-player-glow"></div>
+
+      <!-- Top Header Overlay -->
+      <header class="top-nav">
+        <div class="brand">
+          <span class="brand-gradient">18gram</span>
+        </div>
+        <div class="top-actions">
+          <button id="btn-search" class="nav-icon-btn" title="Search"><i data-lucide="search"></i></button>
+          <button id="btn-sound-toggle" class="nav-icon-btn" title="Toggle Sound">
+            <i data-lucide="volume-x" id="sound-icon"></i>
+          </button>
+          <button id="btn-bookmarks-tab" class="nav-icon-btn" title="Saved Reels">
+            <i data-lucide="bookmark" id="bookmark-tab-icon"></i>
+          </button>
+        </div>
+      </header>
+
+      <!-- Category Filter Bar with Left/Right Scroll Arrows -->
+      <div class="category-bar-wrapper">
+        <button id="btn-pill-scroll-left" class="pill-scroll-arrow left" aria-label="Scroll categories left">
+          <i data-lucide="chevron-left"></i>
+        </button>
+        <div id="category-pills" class="category-pills">
+          <!-- Niches populated dynamically -->
+        </div>
+        <button id="btn-pill-scroll-right" class="pill-scroll-arrow right" aria-label="Scroll categories right">
+          <i data-lucide="chevron-right"></i>
+        </button>
+      </div>
+
+      <!-- Active Filter Indicator Banner -->
+      <div id="filter-banner" class="filter-banner hidden">
+        <span id="filter-banner-text">Showing results for: ...</span>
+        <button id="btn-clear-filter" class="btn-clear-filter"><i data-lucide="x"></i> Clear</button>
+      </div>
+
+      <!-- Vertical Reels Feed Container -->
+      <div id="reels-container" class="reels-container">
+        <!-- Loading State -->
+        <div id="initial-loader" class="loader-container">
+          <div class="spinner"></div>
+          <p>Loading 18+ Reels...</p>
+        </div>
+      </div>
+    </main>
+
+    <!-- Desktop Right Panel: Now Playing & Up Next Queue (screens >= 1180px) -->
+    <aside class="desktop-side-panel">
+      <!-- Now Playing Card -->
+      <div class="side-panel-card now-playing-card">
+        <div class="card-header">
+          <i data-lucide="sparkles" class="card-header-icon"></i>
+          <span>Now Playing</span>
+        </div>
+        <div id="now-playing-info" class="now-playing-content">
+          <div class="now-playing-creator">
+            <div id="now-playing-avatar" class="creator-avatar">🔞</div>
+            <div>
+              <div id="now-playing-username" class="now-playing-username">@loading...</div>
+              <span id="now-playing-badge" class="source-badge badge-redgifs">RedGifs</span>
+            </div>
+          </div>
+          <p id="now-playing-caption" class="now-playing-caption">Waiting for playback...</p>
+          <div id="now-playing-tags" class="tags-row"></div>
+          <div class="now-playing-actions">
+            <button id="btn-side-copy" class="side-action-btn"><i data-lucide="copy"></i> Copy Link</button>
+            <a id="btn-side-open" href="#" target="_blank" rel="noopener noreferrer" class="side-action-btn"><i data-lucide="external-link"></i> Source</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Up Next Queue -->
+      <div class="side-panel-card up-next-card">
+        <div class="card-header">
+          <i data-lucide="list-video" class="card-header-icon"></i>
+          <span>Up Next Queue</span>
+        </div>
+        <div id="up-next-list" class="up-next-list">
+          <div class="empty-queue-hint">Scroll down to load more reels</div>
+        </div>
+      </div>
+
+      <!-- Keyboard Shortcuts Card -->
+      <div class="side-panel-card shortcuts-card">
+        <div class="card-header">
+          <i data-lucide="keyboard" class="card-header-icon"></i>
+          <span>Shortcuts</span>
+        </div>
+        <div class="shortcuts-grid">
+          <div class="shortcut-item"><kbd>↓</kbd> / <kbd>j</kbd> <span>Next Reel</span></div>
+          <div class="shortcut-item"><kbd>↑</kbd> / <kbd>k</kbd> <span>Prev Reel</span></div>
+          <div class="shortcut-item"><kbd>Space</kbd> <span>Play / Pause</span></div>
+          <div class="shortcut-item"><kbd>M</kbd> <span>Mute / Unmute</span></div>
+          <div class="shortcut-item"><kbd>L</kbd> <span>Double Tap / Like</span></div>
+        </div>
+      </div>
+    </aside>
+
+  </div>
+
+  <!-- Toast Notification Container -->
+  <div id="toast" class="toast hidden"></div>
+
+  <script src="app.js"></script>
+</body>
+</html>
