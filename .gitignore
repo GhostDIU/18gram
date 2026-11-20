@@ -9,3 +9,4 @@ npm-debug.log*
 18gram
 18gram.zip
 coverage/
+.env*
