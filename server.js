@@ -201,11 +201,35 @@ app.get('/api/niches', (req, res) => {
   res.json({ success: true, niches: CURATED_NICHES });
 });
 
+// Fisher-Yates array shuffler for fresh discovery feeds
+function shuffleArray(arr) {
+  const result = [...arr];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
 // API: Get Reels (Reads from Supabase Discovery Engine when available, with live fallback)
 app.get('/api/reels', async (req, res) => {
-  const { source = 'all', niche = 'tik-tok', query = '', page = 1 } = req.query;
+  // Prevent any browser or CDN edge caching
+  res.set({
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'Surrogate-Control': 'no-store'
+  });
+
+  const { source = 'all', niche = 'tik-tok', query = '', page = 1, exclude = '' } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
   const pageSize = 15;
+
+  const excludedSet = new Set(
+    exclude
+      ? exclude.split(',').map(s => s.trim().replace(/^db_/, '')).filter(Boolean)
+      : []
+  );
 
   let reels = [];
 
@@ -215,8 +239,7 @@ app.get('/api/reels', async (req, res) => {
       let q = supabase
         .from('videos')
         .select('*')
-        .eq('is_available', true)
-        .order('discovered_at', { ascending: false });
+        .eq('is_available', true);
 
       if (source !== 'all') {
         q = q.eq('source', source);
@@ -225,12 +248,25 @@ app.get('/api/reels', async (req, res) => {
         q = q.ilike('title', `%${query.trim()}%`);
       }
 
-      const from = (pageNum - 1) * pageSize;
-      const to = from + pageSize - 1;
-      const { data, error } = await q.range(from, to);
+      // Fetch a larger candidate pool so we can exclude seen reels and shuffle for freshness
+      const poolLimit = pageNum === 1 ? 80 : 50;
+      const offset = (pageNum - 1) * pageSize;
+      const { data, error } = await q
+        .order('discovered_at', { ascending: false })
+        .range(offset, offset + poolLimit);
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        reels = data.map(v => ({
+        // Filter out any excluded/seen videos
+        const unseenData = data.filter(v =>
+          !excludedSet.has(String(v.id)) &&
+          !excludedSet.has(String(v.external_id)) &&
+          !excludedSet.has(`${v.source}:${v.external_id}`)
+        );
+
+        // Shuffle unseen candidate videos on page 1 for fresh discovery on every refresh
+        const candidatePool = pageNum === 1 ? shuffleArray(unseenData) : unseenData;
+
+        reels = candidatePool.slice(0, pageSize).map(v => ({
           id: `db_${v.id}`,
           rawId: v.external_id,
           source: v.source,
@@ -258,23 +294,37 @@ app.get('/api/reels', async (req, res) => {
     }
   }
 
-  // 2. If no database records found, fallback to live provider fetch
-  if (reels.length === 0) {
+  // 2. If fewer than 8 unseen reels from database, supplement or fallback to live provider fetch
+  if (reels.length < 8) {
+    const existingRawIds = new Set(reels.map(r => r.rawId));
+    // Use dynamic page offset on page 1 so fresh reels appear on every refresh
+    const livePage = pageNum === 1 ? Math.floor(Math.random() * 6) + 1 : pageNum;
+
+    let liveItems = [];
     if (source === 'pornhub' || niche === 'pornhub') {
-      reels = await fetchPornhub({ query, page: pageNum, count: 12 });
+      liveItems = await fetchPornhub({ query, page: livePage, count: 15 });
     } else if (source === 'redgifs') {
-      reels = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
+      liveItems = await fetchRedGifs({ niche, query, page: livePage, count: 18 });
     } else {
-      const redGifsItems = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
-      reels = redGifsItems;
+      const redGifsItems = await fetchRedGifs({ niche, query, page: livePage, count: 18 });
+      liveItems = redGifsItems;
 
       if (pageNum === 1 && !niche.startsWith('tik-tok') && query) {
-        const phItems = await fetchPornhub({ query, page: 1, count: 4 });
+        const phItems = await fetchPornhub({ query, page: livePage, count: 4 });
         if (phItems.length) {
-          reels = [...reels, ...phItems];
+          liveItems = [...liveItems, ...phItems];
         }
       }
     }
+
+    // Filter out already seen or already selected reels
+    const freshLive = liveItems.filter(item =>
+      !existingRawIds.has(item.rawId) &&
+      !excludedSet.has(item.id) &&
+      !excludedSet.has(item.rawId)
+    );
+
+    reels = [...reels, ...shuffleArray(freshLive)].slice(0, pageSize);
   }
 
   // Shuffle slightly or sort by vertical preference

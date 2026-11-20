@@ -6,6 +6,8 @@
 (function () {
   'use strict';
 
+  const SEEN_STORAGE_KEY = '18gram_seen_reels';
+
   // --- State ---
   const state = {
     currentNiche: 'tik-tok',
@@ -17,10 +19,39 @@
     viewMode: 'feed', // 'feed' | 'saved'
     savedReels: JSON.parse(localStorage.getItem('18gram_saved_reels') || '[]'),
     likedReels: new Set(JSON.parse(localStorage.getItem('18gram_liked_reels') || '[]')),
+    seenReels: new Set(JSON.parse(localStorage.getItem(SEEN_STORAGE_KEY) || '[]')),
+    renderedReelIds: new Set(),
     reelsData: [],
     currentVisibleIndex: -1,
     nichesList: [],
   };
+
+  // --- Watched / Seen History Tracking ---
+  function markReelAsSeen(reel) {
+    if (!reel) return;
+    const id = String(reel.id || '');
+    const rawId = String(reel.rawId || '');
+    let updated = false;
+
+    if (id && !state.seenReels.has(id)) {
+      state.seenReels.add(id);
+      updated = true;
+    }
+    if (rawId && !state.seenReels.has(rawId)) {
+      state.seenReels.add(rawId);
+      updated = true;
+    }
+
+    if (updated) {
+      if (state.seenReels.size > 2500) {
+        const arr = Array.from(state.seenReels);
+        state.seenReels = new Set(arr.slice(arr.length - 2000));
+      }
+      try {
+        localStorage.setItem(SEEN_STORAGE_KEY, JSON.stringify(Array.from(state.seenReels)));
+      } catch (e) {}
+    }
+  }
 
   // --- DOM Elements ---
   const ageGateModal = document.getElementById('age-gate');
@@ -224,6 +255,7 @@
     state.hasMore = true;
     state.viewMode = 'feed';
     state.reelsData = [];
+    state.renderedReelIds.clear();
 
     // Sync Top Pills UI
     document.querySelectorAll('.pill-item').forEach(pill => {
@@ -251,10 +283,15 @@
     state.isLoading = true;
 
     if (reset) {
+      state.currentPage = 1;
+      state.reelsData = [];
+      state.renderedReelIds.clear();
+      state.hasMore = true;
+      state.currentVisibleIndex = -1;
       reelsContainer.innerHTML = `
         <div class="loader-container">
           <div class="spinner"></div>
-          <p>Fetching 18+ Reels...</p>
+          <p>Fetching fresh 18+ Reels...</p>
         </div>
       `;
     }
@@ -263,44 +300,106 @@
       const params = new URLSearchParams({
         page: state.currentPage,
         niche: state.currentNiche,
+        _t: Date.now() // Prevent browser/edge caching
       });
       if (state.currentQuery) {
         params.append('query', state.currentQuery);
       }
 
-      const res = await fetch(`/api/reels?${params.toString()}`);
+      // Send recent seen IDs to server to exclude upfront
+      const recentSeen = Array.from(state.seenReels).slice(-100);
+      if (recentSeen.length > 0) {
+        params.append('exclude', recentSeen.join(','));
+      }
+
+      const res = await fetch(`/api/reels?${params.toString()}`, {
+        headers: {
+          'Cache-Control': 'no-cache, no-store',
+          'Pragma': 'no-cache'
+        }
+      });
       const data = await res.json();
 
       if (reset) {
         reelsContainer.innerHTML = '';
       }
 
-      if (!data.reels || data.reels.length === 0) {
-        if (state.currentPage === 1) {
+      const incoming = data.reels || [];
+
+      // Client-side strict deduplication & seen exclusion
+      const freshReels = incoming.filter(reel => {
+        if (!reel || !reel.id) return false;
+        const id = String(reel.id);
+        const rawId = String(reel.rawId || '');
+
+        if (state.renderedReelIds.has(id) || (rawId && state.renderedReelIds.has(rawId))) {
+          return false;
+        }
+
+        if (state.seenReels.has(id) || (rawId && state.seenReels.has(rawId))) {
+          return false;
+        }
+
+        return true;
+      });
+
+      // Handle exhaustion: if zero unseen reels returned
+      if (freshReels.length === 0) {
+        // If the user has seen everything and the feed is completely empty on reset:
+        if (state.reelsData.length === 0 && state.seenReels.size > 0 && reset) {
+          console.log('[feed] All available reels watched. Gracefully resetting seen history and reshuffling...');
+          state.seenReels.clear();
+          try {
+            localStorage.removeItem(SEEN_STORAGE_KEY);
+          } catch (e) {}
+          state.isLoading = false;
+          return loadFeed(true);
+        }
+
+        // If on infinite scroll (page > 1) and this page was all seen, auto-fetch next page
+        if (incoming.length > 0 && state.currentPage < 12) {
+          state.currentPage++;
+          state.isLoading = false;
+          return loadFeed(false);
+        }
+
+        if (state.currentPage === 1 && state.reelsData.length === 0) {
           reelsContainer.innerHTML = `
             <div class="empty-container">
               <i data-lucide="video-off" style="width:48px;height:48px;opacity:0.6;"></i>
-              <p>No reels found for this topic.</p>
-              <button class="btn-primary" style="margin-top:12px;padding:8px 18px;" onclick="window.resetToTrending()">Back to Trends</button>
+              <p>No new reels found for this topic.</p>
+              <button class="btn-primary" style="margin-top:12px;padding:8px 18px;" onclick="window.resetSeenAndReload()">Reset Watch History</button>
             </div>
           `;
           refreshIcons();
         }
+
         state.hasMore = false;
         state.isLoading = false;
         return;
       }
 
       const startIndex = state.reelsData.length;
-      state.reelsData.push(...data.reels);
+      for (const reel of freshReels) {
+        const id = String(reel.id);
+        const rawId = String(reel.rawId || '');
+        state.renderedReelIds.add(id);
+        if (rawId) state.renderedReelIds.add(rawId);
+        state.reelsData.push(reel);
+      }
 
-      data.reels.forEach((reel, i) => {
+      freshReels.forEach((reel, i) => {
         const itemEl = createReelElement(reel, startIndex + i);
         reelsContainer.appendChild(itemEl);
       });
 
       refreshIcons();
       setupIntersectionObserver();
+
+      // Mark the first visible reel as watched immediately on initial load
+      if (reset && state.reelsData.length > 0) {
+        markReelAsSeen(state.reelsData[0]);
+      }
 
       state.currentPage++;
     } catch (err) {
@@ -318,9 +417,16 @@
     }
   }
 
-  // Window helpers for error retry
+  // Window helpers for error retry & watch history reset
   window.resetToTrending = () => selectNiche('tik-tok');
   window.reloadCurrentFeed = () => loadFeed(true);
+  window.resetSeenAndReload = () => {
+    state.seenReels.clear();
+    try {
+      localStorage.removeItem(SEEN_STORAGE_KEY);
+    } catch (e) {}
+    loadFeed(true);
+  };
 
   // --- Create Single Reel Item Element ---
   function createReelElement(reel, index) {
@@ -610,14 +716,15 @@
         if (entry.isIntersecting) {
           state.currentVisibleIndex = index;
 
+          // Track watched/seen reel immediately
+          if (reel) {
+            markReelAsSeen(reel);
+            updateNowPlaying(reel, index);
+          }
+
           if (video) {
             video.muted = state.isMuted;
             video.play().catch(err => console.log('Playback error:', err));
-          }
-
-          // Update Desktop Right Panel & Ambient Glow
-          if (reel) {
-            updateNowPlaying(reel, index);
           }
 
           // Preload next video in advance
@@ -831,6 +938,7 @@
     state.hasMore = true;
     state.viewMode = 'feed';
     state.reelsData = [];
+    state.renderedReelIds.clear();
 
     // Clear active category highlights
     document.querySelectorAll('.pill-item').forEach(p => p.classList.remove('active'));
