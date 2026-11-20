@@ -1,6 +1,9 @@
 import { BaseAdapter } from './base.js';
 
 export const EPORNER_CATEGORY_QUERIES = [
+  { category: 'instagram', query: 'vertical instagram model' },
+  { category: 'tiktok', query: 'vertical tiktok' },
+  { category: 'facebook', query: 'vertical amateur reel' },
   { category: 'tik-tok', query: 'vertical tiktok' },
   { category: 'amateur-girls', query: 'vertical amateur' },
   { category: 'nsfw-cosplay', query: 'cosplay short' },
@@ -62,6 +65,10 @@ export class EpornerAdapter extends BaseAdapter {
 
       const normalized = videos
         .filter(v => v.id)
+        .filter(v => {
+          const dur = parseInt(v.length_sec, 10) || 0;
+          return dur <= 90; // Strictly short reels <= 90s
+        })
         .map(v => {
           const rawKeywords = typeof v.keywords === 'string' ? v.keywords.split(',') : [];
           const poster = v.default_thumb?.src || (Array.isArray(v.thumbs) && v.thumbs[0]?.src) || null;

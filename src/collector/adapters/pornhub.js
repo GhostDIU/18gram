@@ -2,6 +2,9 @@ import { BaseAdapter } from './base.js';
 
 export const PORNHUB_CATEGORY_QUERIES = [
   { category: 'pornhub', query: 'shorties' },
+  { category: 'instagram', query: 'shorties instagram model' },
+  { category: 'tiktok', query: 'shorties tiktok vertical' },
+  { category: 'facebook', query: 'shorties facebook amateur' },
   { category: 'tik-tok', query: 'shorties tiktok vertical' },
   { category: 'amateur-girls', query: 'shorties amateur' },
   { category: 'nsfw-cosplay', query: 'shorties cosplay' },
@@ -62,6 +65,10 @@ export class PornhubAdapter extends BaseAdapter {
 
       const normalized = videos
         .filter(v => v.video_id)
+        .filter(v => {
+          const dur = parseInt(v.duration, 10) || 0;
+          return dur <= 90; // Strictly short reels <= 90s
+        })
         .map(v => {
           const tags = Array.isArray(v.tags)
             ? v.tags.map(t => (typeof t === 'string' ? t : t.tag_name || ''))

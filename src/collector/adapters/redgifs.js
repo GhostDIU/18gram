@@ -1,6 +1,7 @@
 import { BaseAdapter } from './base.js';
 
 const NICHES = [
+  'instagram',
   'tik-tok',
   'amateur-girls',
   'nsfw-cosplay',
@@ -49,9 +50,15 @@ export class RedGifsAdapter extends BaseAdapter {
    * Deep pagination across niches and pages.
    * Cursor structure: { nicheIndex: number, page: number }
    */
-  async fetchVideos({ cursor, limit = 20, since = null } = {}) {
+  async fetchVideos({ cursor, limit = 20, since = null, category = null } = {}) {
     let nicheIndex = cursor?.nicheIndex ?? 0;
     let page = cursor?.page ?? 1;
+
+    if (category) {
+      const cat = category === 'tiktok' ? 'tik-tok' : category;
+      const idx = NICHES.indexOf(cat);
+      if (idx >= 0) nicheIndex = idx;
+    }
 
     if (nicheIndex >= NICHES.length) {
       nicheIndex = 0;
@@ -65,7 +72,20 @@ export class RedGifsAdapter extends BaseAdapter {
     }
 
     const count = Math.min(Math.max(limit, 10), 30);
-    const url = `https://api.redgifs.com/v2/niches/${encodeURIComponent(currentNiche)}/gifs?count=${count}&page=${page}`;
+    const targetCategory = category || currentNiche;
+    let url;
+
+    if (targetCategory === 'facebook') {
+      url = `https://api.redgifs.com/v2/gifs/search?search_text=facebook&count=${count}&page=${page}`;
+    } else if (targetCategory === 'tiktok' || targetCategory === 'tik-tok') {
+      url = `https://api.redgifs.com/v2/niches/tik-tok/gifs?count=${count}&page=${page}`;
+    } else if (targetCategory === 'instagram') {
+      url = `https://api.redgifs.com/v2/niches/instagram/gifs?count=${count}&page=${page}`;
+    } else if (NICHES.includes(targetCategory)) {
+      url = `https://api.redgifs.com/v2/niches/${encodeURIComponent(targetCategory)}/gifs?count=${count}&page=${page}`;
+    } else {
+      url = `https://api.redgifs.com/v2/gifs/search?search_text=${encodeURIComponent(targetCategory)}&count=${count}&page=${page}`;
+    }
 
     try {
       let res = await this.request(url, {
@@ -103,10 +123,11 @@ export class RedGifsAdapter extends BaseAdapter {
 
       const normalized = rawGifs
         .filter(g => g.id && g.urls && (g.urls.hd || g.urls.sd))
+        .filter(g => !g.duration || g.duration <= 90) // Strictly short reels <= 90s
         .map(g => {
           return this.normalizeVideo({
             external_id: g.id,
-            category: currentNiche,
+            category: targetCategory === 'tik-tok' ? 'tiktok' : targetCategory,
             canonical_url: `https://www.redgifs.com/watch/${g.id}`,
             video_url: g.urls.hd || g.urls.sd,
             embed_url: `https://www.redgifs.com/ifr/${g.id}`,

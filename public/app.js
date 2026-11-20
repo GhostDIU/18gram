@@ -10,7 +10,7 @@
 
   // --- State ---
   const state = {
-    currentNiche: 'tik-tok',
+    currentNiche: 'tiktok',
     currentQuery: '',
     currentPage: 1,
     isLoading: false,
@@ -86,6 +86,9 @@
   // Desktop Sidebar
   const sidebarNichesContainer = document.getElementById('sidebar-niches');
   const navForYou = document.getElementById('nav-for-you');
+  const navInstagram = document.getElementById('nav-instagram');
+  const navTikTok = document.getElementById('nav-tiktok');
+  const navFacebook = document.getElementById('nav-facebook');
   const navPornhub = document.getElementById('nav-pornhub');
   const navSaved = document.getElementById('nav-saved');
 
@@ -277,7 +280,10 @@
     });
 
     // Sync Sidebar Nav
-    if (navForYou) navForYou.classList.toggle('active', nicheId !== 'pornhub');
+    if (navForYou) navForYou.classList.toggle('active', nicheId === 'tiktok' || nicheId === 'tik-tok');
+    if (navInstagram) navInstagram.classList.toggle('active', nicheId === 'instagram');
+    if (navTikTok) navTikTok.classList.toggle('active', nicheId === 'tiktok' || nicheId === 'tik-tok');
+    if (navFacebook) navFacebook.classList.toggle('active', nicheId === 'facebook');
     if (navPornhub) navPornhub.classList.toggle('active', nicheId === 'pornhub');
     if (navSaved) navSaved.classList.remove('active');
     btnBookmarksTab.classList.remove('active');
@@ -447,7 +453,7 @@
   }
 
   // Window helpers for error retry & watch history reset
-  window.resetToTrending = () => selectNiche('tik-tok');
+  window.resetToTrending = () => selectNiche('tiktok');
   window.reloadCurrentFeed = () => loadFeed(true);
   window.resetSeenAndReload = () => {
     state.seenReels.clear();
@@ -458,9 +464,16 @@
   };
 
   // Helper to resolve platform branding
-  function getPlatformInfo(source) {
+  function getPlatformInfo(source, category) {
     const s = String(source || '').toLowerCase();
-    if (s.includes('pornhub')) {
+    const c = String(category || '').toLowerCase();
+    if (c === 'instagram' || s.includes('instagram')) {
+      return { id: 'instagram', name: 'Instagram', badgeClass: 'badge-instagram', icon: '📸' };
+    } else if (c === 'tiktok' || c === 'tik-tok' || s.includes('tiktok')) {
+      return { id: 'tiktok', name: 'TikTok', badgeClass: 'badge-tiktok', icon: '🎵' };
+    } else if (c === 'facebook' || s.includes('facebook')) {
+      return { id: 'facebook', name: 'Facebook', badgeClass: 'badge-facebook', icon: '📘' };
+    } else if (s.includes('pornhub')) {
       return { id: 'pornhub', name: 'Pornhub', badgeClass: 'badge-pornhub', icon: '🔞' };
     } else if (s.includes('eporner')) {
       return { id: 'eporner', name: 'Eporner', badgeClass: 'badge-eporner', icon: '⚡' };
@@ -483,7 +496,7 @@
     el.id = `reel-item-${index}`;
     el.dataset.index = index;
 
-    const platform = getPlatformInfo(reel.source_platform || reel.source);
+    const platform = getPlatformInfo(reel.source_platform || reel.source, reel.category);
     const sourceBadgeClass = platform.badgeClass;
     const sourceLabel = platform.name;
 
@@ -502,12 +515,18 @@
         ${
           reel.type === 'embed'
             ? `<div class="iframe-wrapper">
-                <iframe class="reel-iframe" src="${reel.videoUrl}" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+                <iframe class="reel-iframe" 
+                  data-src="${reel.videoUrl}" 
+                  src="${index === 0 ? `${reel.videoUrl}${reel.videoUrl.includes('?') ? '&' : '?'}autoplay=1&muted=1` : ''}" 
+                  allowfullscreen 
+                  allow="autoplay; encrypted-media">
+                </iframe>
                 <div class="iframe-touch-layer" title="Swipe to scroll"></div>
               </div>`
             : `<video class="reel-video" 
                 playsinline 
                 loop 
+                muted 
                 preload="${index < 2 ? 'auto' : 'none'}" 
                 poster="${reel.poster || reel.thumbnail_url || ''}"
                 src="${reel.videoUrl}">
@@ -777,6 +796,7 @@
         const itemEl = entry.target;
         const index = parseInt(itemEl.dataset.index, 10);
         const video = itemEl.querySelector('video');
+        const iframe = itemEl.querySelector('iframe');
         const reel = state.reelsData[index];
 
         if (entry.isIntersecting) {
@@ -788,17 +808,32 @@
             updateNowPlaying(reel, index);
           }
 
+          // True autoplay for native <video> respecting user mute preference
           if (video) {
             video.muted = state.isMuted;
-            video.play().catch(err => console.log('Playback error:', err));
+            video.play().catch(err => console.log('Autoplay play error:', err));
           }
 
-          // Preload next video in advance
-          const nextItem = document.getElementById(`reel-item-${index + 1}`);
-          if (nextItem) {
-            const nextVideo = nextItem.querySelector('video');
-            if (nextVideo && nextVideo.preload === 'none') {
-              nextVideo.preload = 'auto';
+          // True autoplay for embedded <iframe>: only activate when visible to eliminate background audio & CPU lag
+          if (iframe) {
+            const baseSrc = iframe.dataset.src || (reel ? reel.videoUrl : '');
+            if (baseSrc) {
+              const sep = baseSrc.includes('?') ? '&' : '?';
+              const autoSrc = `${baseSrc}${sep}autoplay=1&muted=${state.isMuted ? '1' : '0'}`;
+              if (iframe.src !== autoSrc) {
+                iframe.src = autoSrc;
+              }
+            }
+          }
+
+          // Preload next 1-2 videos ahead of active reel for instantaneous swiping
+          for (let offset = 1; offset <= 2; offset++) {
+            const nextItem = document.getElementById(`reel-item-${index + offset}`);
+            if (nextItem) {
+              const nextVideo = nextItem.querySelector('video');
+              if (nextVideo && nextVideo.preload === 'none') {
+                nextVideo.preload = 'auto';
+              }
             }
           }
 
@@ -807,8 +842,14 @@
             loadFeed(false);
           }
         } else {
+          // Off-screen: pause native video
           if (video && !video.paused) {
             video.pause();
+          }
+
+          // Off-screen: unload iframe to prevent background audio overlap & browser lag
+          if (iframe && iframe.src) {
+            iframe.src = '';
           }
         }
       });
@@ -882,10 +923,26 @@
       state.isMuted = !state.isMuted;
       updateAudioUI();
 
-      // Apply to all videos
+      // Apply to all native videos
       document.querySelectorAll('video').forEach((v) => {
         v.muted = state.isMuted;
       });
+
+      // Update currently active iframe if any
+      if (state.currentVisibleIndex >= 0) {
+        const activeItem = document.getElementById(`reel-item-${state.currentVisibleIndex}`);
+        if (activeItem) {
+          const iframe = activeItem.querySelector('iframe');
+          const reel = state.reelsData[state.currentVisibleIndex];
+          if (iframe && reel) {
+            const baseSrc = iframe.dataset.src || reel.videoUrl;
+            if (baseSrc) {
+              const sep = baseSrc.includes('?') ? '&' : '?';
+              iframe.src = `${baseSrc}${sep}autoplay=1&muted=${state.isMuted ? '1' : '0'}`;
+            }
+          }
+        }
+      }
 
       showToast(state.isMuted ? 'Audio muted' : 'Audio unmuted 🔊');
     }
@@ -986,12 +1043,21 @@
     });
 
     btnClearFilter.addEventListener('click', () => {
-      selectNiche('tik-tok');
+      selectNiche('tiktok');
     });
 
     // Sidebar Nav links
     if (navForYou) {
-      navForYou.addEventListener('click', () => selectNiche('tik-tok'));
+      navForYou.addEventListener('click', () => selectNiche('tiktok'));
+    }
+    if (navInstagram) {
+      navInstagram.addEventListener('click', () => selectNiche('instagram'));
+    }
+    if (navTikTok) {
+      navTikTok.addEventListener('click', () => selectNiche('tiktok'));
+    }
+    if (navFacebook) {
+      navFacebook.addEventListener('click', () => selectNiche('facebook'));
     }
     if (navPornhub) {
       navPornhub.addEventListener('click', () => selectNiche('pornhub'));

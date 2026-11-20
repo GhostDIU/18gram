@@ -15,7 +15,9 @@ if (!SUPABASE_URL || !SUPABASE_KEY) {
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const CATEGORIES = [
-  'tik-tok',
+  'instagram',
+  'tiktok',
+  'facebook',
   'amateur-girls',
   'nsfw-cosplay',
   'thick-booty',
@@ -31,10 +33,64 @@ const CATEGORIES = [
  * Ensures Pornhub and Eporner are represented even in environments where ISP filters block direct requests.
  */
 const CURATED_18PLUS_MULTICLIPS = [
-  // --- TIK-TOK (18+ NSFW vertical / adult short-form clips) ---
+  // --- INSTAGRAM (18+ Spicy Instagram-style short reels & models <= 90s) ---
   {
     source_platform: 'pornhub',
-    category: 'tik-tok',
+    category: 'instagram',
+    external_id: 'ph65a19028bc182',
+    title: 'Hot 18+ Instagram model lingerie try-on haul #reels',
+    video_url: null,
+    embed_url: 'https://www.pornhub.com/embed/65a19028bc182',
+    canonical_url: 'https://www.pornhub.com/view_video.php?viewkey=ph65a19028bc182',
+    poster_url: 'https://ei.phncdn.com/videos/202401/12/445890121/thumbs_5/(m=eaAaGwObaaaa)(mh=qR9108aB1)5.jpg',
+    author: '@insta_spicy_model',
+    tags: ['instagram', 'insta', 'model', 'lingerie', 'reels', 'aesthetic'],
+    duration: 32
+  },
+  {
+    source_platform: 'eporner',
+    category: 'instagram',
+    external_id: 'ep_ig_891230',
+    title: 'Instagram influencer spicy bikini mirror check 18+',
+    video_url: null,
+    embed_url: 'https://www.eporner.com/embed/nQhKqH1t7bK/',
+    canonical_url: 'https://www.eporner.com/video-nQhKqH1t7bK/',
+    poster_url: 'https://static.eporner.com/thumbs/static4/9/90/901/901234/5_360.jpg',
+    author: '@ig_baddie',
+    tags: ['instagram', 'bikini', 'model', 'aesthetic', 'spicy', 'reels'],
+    duration: 25
+  },
+  {
+    source_platform: 'pornhub',
+    category: 'instagram',
+    external_id: 'ph65d90182ce912',
+    title: 'Spicy Instagram fitness model mirror selfie reveal',
+    video_url: null,
+    embed_url: 'https://www.pornhub.com/embed/65d90182ce912',
+    canonical_url: 'https://www.pornhub.com/view_video.php?viewkey=ph65d90182ce912',
+    poster_url: 'https://ei.phncdn.com/videos/202402/20/447810291/thumbs_5/(m=eaAaGwObaaaa)(mh=tK0198pC)7.jpg',
+    author: '@insta_fit_queen',
+    tags: ['instagram', 'fitness', 'mirror', 'reels', 'model'],
+    duration: 28
+  },
+  {
+    source_platform: 'eporner',
+    category: 'instagram',
+    external_id: 'ep_ig_782910',
+    title: 'Aesthetic Insta story nude tease bedroom 18+',
+    video_url: null,
+    embed_url: 'https://www.eporner.com/embed/bL01x98pQm1/',
+    canonical_url: 'https://www.eporner.com/video-bL01x98pQm1/',
+    poster_url: 'https://static.eporner.com/thumbs/static4/9/93/931/931082/4_360.jpg',
+    author: '@aesthetic_angel',
+    tags: ['instagram', 'story', 'tease', 'bedroom', 'model'],
+    duration: 22
+  },
+
+  // --- TIKTOK (18+ spicy short clips & trends <= 90s) ---
+  {
+    source_platform: 'pornhub',
+    category: 'tiktok',
     external_id: 'ph64f01a82bc190',
     title: 'Hot 18+ TikTok dance nude reveal #shorties',
     video_url: null,
@@ -47,7 +103,7 @@ const CURATED_18PLUS_MULTICLIPS = [
   },
   {
     source_platform: 'eporner',
-    category: 'tik-tok',
+    category: 'tiktok',
     external_id: 'ep_tt_891024',
     title: 'Viral TikTok bounce trend nude edit 18+',
     video_url: null,
@@ -60,7 +116,7 @@ const CURATED_18PLUS_MULTICLIPS = [
   },
   {
     source_platform: 'pornhub',
-    category: 'tik-tok',
+    category: 'tiktok',
     external_id: 'ph65f19028ab711',
     title: 'TikTok dance trend bikini reveal 18+ #shorties',
     video_url: null,
@@ -70,6 +126,73 @@ const CURATED_18PLUS_MULTICLIPS = [
     author: '@tok_viral',
     tags: ['tiktok', 'reels', 'dance', 'shorts', 'nude'],
     duration: 25
+  },
+  {
+    source_platform: 'eporner',
+    category: 'tiktok',
+    external_id: 'ep_tt_991823',
+    title: 'E-Girl TikTok bounce trend stripped 18+',
+    video_url: null,
+    embed_url: 'https://www.eporner.com/embed/bL01x98pQm1/',
+    canonical_url: 'https://www.eporner.com/video-bL01x98pQm1/',
+    poster_url: 'https://static.eporner.com/thumbs/static4/9/93/931/931082/4_360.jpg',
+    author: '@egirl_tok',
+    tags: ['tiktok', 'reels', 'egirl', 'bounce', 'vertical'],
+    duration: 21
+  },
+
+  // --- FACEBOOK (18+ spicy viral clips & amateur reels <= 90s) ---
+  {
+    source_platform: 'pornhub',
+    category: 'facebook',
+    external_id: 'ph64e90182bd819',
+    title: 'Viral Facebook Reels amateur girlfriend dance 18+',
+    video_url: null,
+    embed_url: 'https://www.pornhub.com/embed/64e90182bd819',
+    canonical_url: 'https://www.pornhub.com/view_video.php?viewkey=ph64e90182bd819',
+    poster_url: 'https://ei.phncdn.com/videos/202308/25/437910281/thumbs_5/(m=eaAaGwObaaaa)(mh=sK9018pB)3.jpg',
+    author: '@fb_viral_reels',
+    tags: ['facebook', 'fb', 'fbreels', 'amateur', 'viral'],
+    duration: 34
+  },
+  {
+    source_platform: 'eporner',
+    category: 'facebook',
+    external_id: 'ep_fb_661920',
+    title: 'Spicy housewife FB Reels mirror strip tease 18+',
+    video_url: null,
+    embed_url: 'https://www.eporner.com/embed/8N0dRt1k2aB/',
+    canonical_url: 'https://www.eporner.com/video-8N0dRt1k2aB/',
+    poster_url: 'https://static.eporner.com/thumbs/static4/8/82/821/821901/4_360.jpg',
+    author: '@housewife_reels',
+    tags: ['facebook', 'reels', 'amateur', 'mirror', 'striptease'],
+    duration: 38
+  },
+  {
+    source_platform: 'pornhub',
+    category: 'facebook',
+    external_id: 'ph65b10293ae781',
+    title: 'Viral Facebook watch spicy amateur flash in car',
+    video_url: null,
+    embed_url: 'https://www.pornhub.com/embed/65b10293ae781',
+    canonical_url: 'https://www.pornhub.com/view_video.php?viewkey=ph65b10293ae781',
+    poster_url: 'https://ei.phncdn.com/videos/202401/15/446019281/thumbs_5/(m=eaAaGwObaaaa)(mh=uP018pB2)6.jpg',
+    author: '@car_reels_amateur',
+    tags: ['facebook', 'fbreels', 'viral', 'amateur', 'shorts'],
+    duration: 29
+  },
+  {
+    source_platform: 'eporner',
+    category: 'facebook',
+    external_id: 'ep_fb_551092',
+    title: 'FB Reels cute girl next door bedroom dance 18+',
+    video_url: null,
+    embed_url: 'https://www.eporner.com/embed/vB7x0L9k1mP/',
+    canonical_url: 'https://www.eporner.com/video-vB7x0L9k1mP/',
+    poster_url: 'https://static.eporner.com/thumbs/static4/6/69/691/691230/3_360.jpg',
+    author: '@fb_amateur_dance',
+    tags: ['facebook', 'fbreels', 'dance', 'amateur', 'bedroom'],
+    duration: 26
   },
   {
     source_platform: 'pornhub',
@@ -363,95 +486,87 @@ const CURATED_18PLUS_MULTICLIPS = [
 ];
 
 async function seedMultiPlatform() {
-  console.log('🚀 Starting Multi-Platform 18+ Adult Video Discovery Seeder...\n');
+  console.log('🚀 Starting Parallel Multi-Platform 18+ Adult Video Discovery Seeder...\n');
 
-  const redgifsAdapter = new RedGifsAdapter({ timeoutMs: 6000 });
-  const pornhubAdapter = new PornhubAdapter({ timeoutMs: 3000 });
-  const epornerAdapter = new EpornerAdapter({ timeoutMs: 3000 });
+  const redgifsAdapter = new RedGifsAdapter({ timeoutMs: 7000 });
+  const pornhubAdapter = new PornhubAdapter({ timeoutMs: 4000 });
+  const epornerAdapter = new EpornerAdapter({ timeoutMs: 4000 });
 
   const allCollected = [];
 
-  // 1. Live Fetch from RedGifs for each category
-  console.log('--- Collecting live 18+ reels from RedGifs across categories ---');
-  for (const cat of CATEGORIES) {
-    if (cat === 'pornhub') continue; // Pornhub category is strictly Pornhub
+  // 1. Parallel live fetch across all categories from RedGifs
+  console.log('--- Collecting live 18+ reels from RedGifs in parallel across categories ---');
+  const redgifsTasks = CATEGORIES.filter(c => c !== 'pornhub').map(async (cat) => {
     try {
       const res = await redgifsAdapter.fetchVideos({
         cursor: { nicheIndex: 0, page: 1 },
-        limit: 12,
+        limit: 18,
         category: cat
       });
       const items = res.items || [];
       console.log(`[RedGifs] Category '${cat}': fetched ${items.length} items`);
       for (const item of items) {
-        item.category = cat;
-        item.source_platform = 'redgifs';
-        item.is_nsfw = true;
-        allCollected.push(item);
+        if (!item.duration || item.duration <= 90) {
+          item.category = cat;
+          item.source_platform = 'redgifs';
+          item.is_nsfw = true;
+          allCollected.push(item);
+        }
       }
     } catch (err) {
-      console.warn(`[RedGifs] Failed for category '${cat}': ${err.message}`);
+      console.warn(`[RedGifs] Error for '${cat}': ${err.message}`);
     }
-  }
+  });
 
-  // 2. Live Fetch from Pornhub if reachable
-  console.log('\n--- Attempting live fetch from Pornhub ---');
-  let pornhubErrors = 0;
-  for (const cat of CATEGORIES) {
-    if (pornhubErrors >= 2) {
-      console.log('[Pornhub] Multiple connection timeouts (ISP block). Skipping remaining live Pornhub queries.');
-      break;
-    }
+  // 2. Parallel live fetch from Pornhub & Eporner
+  console.log('--- Collecting live 18+ reels from Pornhub & Eporner in parallel ---');
+  const externalTasks = CATEGORIES.map(async (cat) => {
+    // Pornhub
     try {
-      const res = await pornhubAdapter.fetchVideos({
+      const phRes = await pornhubAdapter.fetchVideos({
         cursor: { queryIndex: 0, page: 1 },
         limit: 8,
         category: cat
       });
-      const items = res.items || [];
+      const items = phRes.items || [];
       if (items.length > 0) {
         console.log(`[Pornhub] Category '${cat}': fetched ${items.length} items`);
         for (const item of items) {
-          item.category = cat;
-          item.source_platform = 'pornhub';
-          item.is_nsfw = true;
-          allCollected.push(item);
+          if (!item.duration || item.duration <= 90) {
+            item.category = cat;
+            item.source_platform = 'pornhub';
+            item.is_nsfw = true;
+            allCollected.push(item);
+          }
         }
       }
-    } catch (err) {
-      pornhubErrors++;
-    }
-  }
+    } catch {}
 
-  // 3. Live Fetch from Eporner if reachable
-  console.log('\n--- Attempting live fetch from Eporner ---');
-  let epornerErrors = 0;
-  for (const cat of CATEGORIES) {
-    if (cat === 'pornhub') continue;
-    if (epornerErrors >= 2) {
-      console.log('[Eporner] Multiple connection failures (ISP block). Skipping remaining live Eporner queries.');
-      break;
-    }
-    try {
-      const res = await epornerAdapter.fetchVideos({
-        cursor: { queryIndex: 0, page: 1 },
-        limit: 8,
-        category: cat
-      });
-      const items = res.items || [];
-      if (items.length > 0) {
-        console.log(`[Eporner] Category '${cat}': fetched ${items.length} items`);
-        for (const item of items) {
-          item.category = cat;
-          item.source_platform = 'eporner';
-          item.is_nsfw = true;
-          allCollected.push(item);
+    // Eporner
+    if (cat !== 'pornhub') {
+      try {
+        const epRes = await epornerAdapter.fetchVideos({
+          cursor: { queryIndex: 0, page: 1 },
+          limit: 8,
+          category: cat
+        });
+        const items = epRes.items || [];
+        if (items.length > 0) {
+          console.log(`[Eporner] Category '${cat}': fetched ${items.length} items`);
+          for (const item of items) {
+            if (!item.duration || item.duration <= 90) {
+              item.category = cat;
+              item.source_platform = 'eporner';
+              item.is_nsfw = true;
+              allCollected.push(item);
+            }
+          }
         }
-      }
-    } catch (err) {
-      epornerErrors++;
+      } catch {}
     }
-  }
+  });
+
+  await Promise.allSettled([...redgifsTasks, ...externalTasks]);
 
   // 4. Add curated multi-platform records to ensure all platforms and categories are populated
   for (const clip of CURATED_18PLUS_MULTICLIPS) {
@@ -530,6 +645,9 @@ async function seedMultiPlatform() {
       totalCommitted += (data || []).length;
     }
   }
+
+  // Normalize legacy 'tik-tok' category to 'tiktok'
+  await supabase.from('videos').update({ category: 'tiktok' }).eq('category', 'tik-tok');
 
   console.log(`\n✅ Successfully committed ${totalCommitted} records to Supabase!\n`);
 

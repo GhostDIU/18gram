@@ -57,13 +57,19 @@ async function getRedGifsToken(forceRefresh = false) {
 }
 
 // Fetch RedGifs with auto-retry
-async function fetchRedGifs({ niche = 'tik-tok', query = '', page = 1, count = 15 }) {
+async function fetchRedGifs({ niche = 'tiktok', query = '', page = 1, count = 15 }) {
   let token = await getRedGifsToken();
   if (!token) return [];
 
   let url;
   if (query && query.trim().length > 0) {
     url = `https://api.redgifs.com/v2/gifs/search?search_text=${encodeURIComponent(query.trim())}&count=${count}&page=${page}`;
+  } else if (niche === 'facebook') {
+    url = `https://api.redgifs.com/v2/gifs/search?search_text=facebook&count=${count}&page=${page}`;
+  } else if (niche === 'instagram') {
+    url = `https://api.redgifs.com/v2/niches/instagram/gifs?count=${count}&page=${page}`;
+  } else if (niche === 'tiktok' || niche === 'tik-tok') {
+    url = `https://api.redgifs.com/v2/niches/tik-tok/gifs?count=${count}&page=${page}`;
   } else if (niche && niche !== 'all') {
     url = `https://api.redgifs.com/v2/niches/${encodeURIComponent(niche)}/gifs?count=${count}&page=${page}`;
   } else {
@@ -271,7 +277,9 @@ async function fetchMultiPlatformLive({ category = 'tik-tok', query = '', page =
 
 // Curated Niches / Categories
 const CURATED_NICHES = [
-  { id: 'tik-tok', name: 'TikTok & Reels', icon: '🎵', count: '250K+' },
+  { id: 'instagram', name: 'Instagram Reels', icon: '📸', count: '480K+' },
+  { id: 'tiktok', name: 'TikTok', icon: '🎵', count: '620K+' },
+  { id: 'facebook', name: 'Facebook Reels', icon: '📘', count: '310K+' },
   { id: 'amateur-girls', name: 'Amateur', icon: '💃', count: '1.2M+' },
   { id: 'nsfw-cosplay', name: 'Cosplay', icon: '🎭', count: '35K+' },
   { id: 'thick-booty', name: 'Thick Booty', icon: '🍑', count: '660K+' },
@@ -283,6 +291,18 @@ const CURATED_NICHES = [
 ];
 
 const NICHE_MAP = {
+  'instagram': {
+    tags: ['instagram', 'insta', 'model', 'spicy', 'reels', 'aesthetic'],
+    source: 'redgifs'
+  },
+  'tiktok': {
+    tags: ['tiktok', 'reels', 'dance', 'trend', 'trends', 'viral', 'short', 'tok', 'tiktoker'],
+    source: 'redgifs'
+  },
+  'facebook': {
+    tags: ['facebook', 'fb', 'fbreels', 'amateur', 'viral', 'reels'],
+    source: 'redgifs'
+  },
   'tik-tok': {
     tags: ['tiktok', 'reels', 'dance', 'trend', 'trends', 'viral', 'short', 'tok', 'tiktoker'],
     source: 'redgifs'
@@ -336,7 +356,62 @@ function shuffleArray(arr) {
   return result;
 }
 
-// API: Get Reels (Reads from Supabase Discovery Engine when available, with live fallback)
+// Background asynchronous scraper (non-blocking, never stalls feed requests)
+let isBackgroundSyncing = false;
+async function triggerBackgroundSync(targetNiche) {
+  if (isBackgroundSyncing || !supabase) return;
+  isBackgroundSyncing = true;
+  try {
+    const liveItems = await fetchMultiPlatformLive({
+      category: targetNiche,
+      page: Math.floor(Math.random() * 3) + 1,
+      count: 14
+    });
+
+    if (liveItems && liveItems.length > 0) {
+      const nowIso = new Date().toISOString();
+      const rows = liveItems
+        .filter(item => !item.duration || item.duration <= 90) // Strictly short reels <= 90s
+        .map(item => ({
+          source: item.source_platform || item.source || 'redgifs',
+          source_platform: item.source_platform || item.source || 'redgifs',
+          category: targetNiche === 'tik-tok' ? 'tiktok' : targetNiche,
+          is_nsfw: true,
+          external_id: String(item.rawId || item.id),
+          canonical_url: item.webUrl || null,
+          dedupe_key: `${item.source_platform || item.source || 'redgifs'}:${item.rawId || item.id}`,
+          video_url: item.videoUrl && item.type === 'mp4' ? item.videoUrl : null,
+          embed_url: item.embedUrl || (item.type === 'embed' ? item.videoUrl : null),
+          title: (item.title || '').slice(0, 255),
+          poster_url: item.poster || null,
+          thumbnail_url: item.poster || null,
+          author: (item.author || '').slice(0, 100),
+          tags: Array.isArray(item.tags) ? item.tags.slice(0, 10) : [],
+          duration: item.duration || 0,
+          discovered_at: nowIso,
+          created_at: nowIso,
+          last_seen_at: nowIso,
+          is_available: true
+        }));
+
+      // In-memory deduplication before upsert
+      const map = new Map();
+      for (const r of rows) {
+        if (!map.has(r.dedupe_key)) map.set(r.dedupe_key, r);
+      }
+      await supabase.from('videos').upsert(Array.from(map.values()), {
+        onConflict: 'dedupe_key',
+        ignoreDuplicates: true
+      });
+    }
+  } catch (err) {
+    console.warn('[bg-sync] Background sync error:', err.message);
+  } finally {
+    isBackgroundSyncing = false;
+  }
+}
+
+// API: Get Reels (Reads directly from Supabase with composite index; NEVER blocks on live scraping)
 app.get('/api/reels', async (req, res) => {
   // Prevent any browser or CDN edge caching
   res.set({
@@ -346,9 +421,9 @@ app.get('/api/reels', async (req, res) => {
     'Surrogate-Control': 'no-store'
   });
 
-  const { source = 'all', niche = 'tik-tok', query = '', page = 1, exclude = '' } = req.query;
+  const { source = 'all', niche = 'tiktok', query = '', page = 1, exclude = '' } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
-  const pageSize = 15;
+  const pageSize = 12; // Small initial batch for near-instant first paint
 
   const excludedSet = new Set(
     exclude
@@ -356,64 +431,69 @@ app.get('/api/reels', async (req, res) => {
       : []
   );
 
-  const isPornhubNiche = niche === 'pornhub' || source === 'pornhub';
+  const targetNiche = (niche === 'tik-tok' || niche === 'for-you') ? 'tiktok' : niche;
+  const isPornhubNiche = targetNiche === 'pornhub' || source === 'pornhub';
   const effectiveSource = isPornhubNiche ? 'pornhub' : (source !== 'all' ? source : null);
-  const nicheConfig = NICHE_MAP[niche];
 
   let reels = [];
 
-  // 1. Try reading from pre-discovered Supabase videos if configured
+  // 1. Instant Lean Supabase Query using composite index (category, created_at DESC)
   if (supabase) {
     try {
       let q = supabase
         .from('videos')
-        .select('*')
-        .eq('is_available', true);
+        .select('id, external_id, source, source_platform, category, is_nsfw, title, video_url, embed_url, poster_url, thumbnail_url, canonical_url, author, tags, duration, duration_seconds, is_available, created_at')
+        .eq('is_available', true)
+        .eq('is_nsfw', true)
+        .lte('duration', 90); // Strictly <= 90s short reels
 
       if (effectiveSource) {
         q = q.or(`source.eq.${effectiveSource},source_platform.eq.${effectiveSource}`);
       }
 
       // Filter by category in Supabase
-      if (niche && niche !== 'all') {
-        q = q.eq('category', niche);
+      if (targetNiche && targetNiche !== 'all') {
+        if (targetNiche === 'tiktok') {
+          q = q.or('category.eq.tiktok,category.eq.tik-tok');
+        } else {
+          q = q.eq('category', targetNiche);
+        }
       }
 
       if (query && query.trim().length > 0) {
         q = q.ilike('title', `%${query.trim()}%`);
       }
 
-      // Fetch candidate pool so we can exclude seen reels and ensure a multi-platform mix
-      const poolLimit = pageNum === 1 ? 90 : 60;
+      const poolLimit = pageNum === 1 ? 80 : 50;
       const offset = (pageNum - 1) * pageSize;
       const { data, error } = await q
         .order('created_at', { ascending: false })
         .range(offset, offset + poolLimit);
 
       if (!error && Array.isArray(data) && data.length > 0) {
-        // Filter out any excluded/seen videos
-        const unseenData = data.filter(v =>
+        // Filter out excluded / seen videos
+        let candidateData = data.filter(v =>
           !excludedSet.has(String(v.id)) &&
           !excludedSet.has(String(v.external_id)) &&
           !excludedSet.has(`${v.source_platform || v.source}:${v.external_id}`)
         );
 
-        // Group by platform to interleave and ensure multi-platform diversity
-        const byPlatform = {};
-        for (const item of unseenData) {
-          const plat = item.source_platform || item.source || 'redgifs';
-          if (!byPlatform[plat]) byPlatform[plat] = [];
-          byPlatform[plat].push(item);
+        // If user has watched every video in DB, recycle gracefully with a fresh shuffle
+        if (candidateData.length === 0 && data.length > 0) {
+          candidateData = shuffleArray(data);
         }
 
-        // Interleave across platforms (e.g. RedGifs, Pornhub, Eporner)
+        // Multi-platform interleaving prioritizing RedGifs (~60-70% direct MP4)
+        const redgifsList = candidateData.filter(v => (v.source_platform || v.source) === 'redgifs');
+        const othersList = candidateData.filter(v => (v.source_platform || v.source) !== 'redgifs');
+
         const interleaved = [];
-        const platKeys = Object.keys(byPlatform);
-        let maxLen = Math.max(...platKeys.map(k => byPlatform[k].length), 0);
-        for (let i = 0; i < maxLen; i++) {
-          for (const k of platKeys) {
-            if (byPlatform[k][i]) interleaved.push(byPlatform[k][i]);
-          }
+        let rIdx = 0;
+        let oIdx = 0;
+        while (rIdx < redgifsList.length || oIdx < othersList.length) {
+          if (rIdx < redgifsList.length) interleaved.push(redgifsList[rIdx++]);
+          if (rIdx < redgifsList.length) interleaved.push(redgifsList[rIdx++]); // 2:1 ratio for ~67% RedGifs
+          if (oIdx < othersList.length) interleaved.push(othersList[oIdx++]);
         }
 
         // Shuffle candidate pool on page 1 for fresh discovery
@@ -427,7 +507,7 @@ app.get('/api/reels', async (req, res) => {
             source: platform,
             source_platform: platform,
             sourceName: platform.toUpperCase(),
-            category: v.category || niche,
+            category: v.category || targetNiche,
             is_nsfw: v.is_nsfw !== false,
             author: v.author || `@${platform}`,
             title: v.title || `${platform} reel`,
@@ -450,38 +530,31 @@ app.get('/api/reels', async (req, res) => {
         });
       }
     } catch (err) {
-      console.warn('[server] Supabase read failed, falling back to live fetch:', err.message);
+      console.warn('[server] Supabase read failed:', err.message);
     }
   }
 
-  // 2. If fewer than 10 category-specific reels from database, supplement with multi-platform live fetch
+  // 2. If candidate count in DB is low (< 10), trigger background async sync WITHOUT awaiting it
   if (reels.length < 10) {
-    const existingRawIds = new Set(reels.map(r => r.rawId));
-    // Use dynamic page offset on page 1 so fresh reels appear on every refresh
-    const livePage = pageNum === 1 ? Math.floor(Math.random() * 5) + 1 : pageNum;
-
-    let liveItems = [];
-    if (isPornhubNiche) {
-      liveItems = await fetchPornhub({ query: query || 'shorties', page: livePage, count: 18 });
-      // If Pornhub is geo-blocked or unreachable, gracefully fallback to RedGifs
-      if (liveItems.length === 0) {
-        liveItems = await fetchRedGifs({ niche: 'amateur-girls', query: query || 'shorts', page: livePage, count: 18 });
-      }
-    } else {
-      liveItems = await fetchMultiPlatformLive({ category: niche, query, page: livePage, count: 20 });
-    }
-
-    // Filter out already seen or already selected reels
-    const freshLive = liveItems.filter(item =>
-      !existingRawIds.has(item.rawId) &&
-      !excludedSet.has(item.id) &&
-      !excludedSet.has(item.rawId)
-    );
-
-    reels = [...reels, ...shuffleArray(freshLive)].slice(0, pageSize);
+    triggerBackgroundSync(targetNiche).catch(err => {
+      console.warn('[bg-sync] Async trigger error:', err.message);
+    });
   }
 
-  // Shuffle slightly or sort by vertical preference
+  // 3. Fallback: only if database is completely empty for this category (cold start), do a fast single live fetch
+  if (reels.length === 0) {
+    try {
+      const liveItems = await fetchRedGifs({
+        niche: targetNiche,
+        query,
+        page: 1,
+        count: pageSize
+      });
+      reels = liveItems.slice(0, pageSize);
+    } catch {}
+  }
+
+  // Sort by vertical preference
   reels.sort((a, b) => (b.isVertical ? 1 : 0) - (a.isVertical ? 1 : 0));
 
   res.json({
