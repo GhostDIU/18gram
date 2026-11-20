@@ -106,6 +106,7 @@ export class RedGifsAdapter extends BaseAdapter {
         .map(g => {
           return this.normalizeVideo({
             external_id: g.id,
+            category: currentNiche,
             canonical_url: `https://www.redgifs.com/watch/${g.id}`,
             video_url: g.urls.hd || g.urls.sd,
             embed_url: `https://www.redgifs.com/ifr/${g.id}`,

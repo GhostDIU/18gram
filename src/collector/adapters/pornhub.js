@@ -1,12 +1,15 @@
 import { BaseAdapter } from './base.js';
 
-const QUERIES = [
-  'shorties',
-  'tiktok',
-  'reels',
-  'vertical',
-  'amateur shorts',
-  'quickies'
+export const PORNHUB_CATEGORY_QUERIES = [
+  { category: 'pornhub', query: 'shorties' },
+  { category: 'tik-tok', query: 'shorties tiktok vertical' },
+  { category: 'amateur-girls', query: 'shorties amateur' },
+  { category: 'nsfw-cosplay', query: 'shorties cosplay' },
+  { category: 'thick-booty', query: 'shorties thick booty' },
+  { category: 'fit-girls', query: 'shorties gym fitness' },
+  { category: 'latinas', query: 'shorties latina' },
+  { category: 'busty-asians', query: 'shorties asian' },
+  { category: 'goth-girls', query: 'shorties goth' }
 ];
 
 export class PornhubAdapter extends BaseAdapter {
@@ -18,16 +21,23 @@ export class PornhubAdapter extends BaseAdapter {
    * Deep pagination across queries and pages.
    * Cursor structure: { queryIndex: number, page: number }
    */
-  async fetchVideos({ cursor, limit = 20, since = null } = {}) {
+  async fetchVideos({ cursor, limit = 20, since = null, category = null } = {}) {
     let queryIndex = cursor?.queryIndex ?? 0;
     let page = cursor?.page ?? 1;
 
-    if (queryIndex >= QUERIES.length) {
+    if (category) {
+      const idx = PORNHUB_CATEGORY_QUERIES.findIndex(q => q.category === category);
+      if (idx >= 0) queryIndex = idx;
+    }
+
+    if (queryIndex >= PORNHUB_CATEGORY_QUERIES.length) {
       queryIndex = 0;
       page = 1;
     }
 
-    const currentQuery = QUERIES[queryIndex];
+    const currentItem = PORNHUB_CATEGORY_QUERIES[queryIndex];
+    const currentQuery = currentItem.query;
+    const currentCategory = currentItem.category;
     const count = Math.min(Math.max(limit, 10), 30);
     const url = `https://www.pornhub.com/webmasters/search?search=${encodeURIComponent(currentQuery)}&thumbsize=large&ordering=mostviewed&page=${page}&count=${count}`;
 
@@ -42,7 +52,7 @@ export class PornhubAdapter extends BaseAdapter {
         console.warn(`[pornhub] Fetch returned status ${res.status}`);
         return {
           items: [],
-          nextCursor: { queryIndex: (queryIndex + 1) % QUERIES.length, page: 1 },
+          nextCursor: { queryIndex: (queryIndex + 1) % PORNHUB_CATEGORY_QUERIES.length, page: 1 },
           hasMore: true
         };
       }
@@ -59,6 +69,7 @@ export class PornhubAdapter extends BaseAdapter {
 
           return this.normalizeVideo({
             external_id: String(v.video_id),
+            category: currentCategory,
             canonical_url: v.url || `https://www.pornhub.com/view_video.php?viewkey=${v.video_id}`,
             video_url: null,
             embed_url: `https://www.pornhub.com/embed/${v.video_id}`,
@@ -78,7 +89,7 @@ export class PornhubAdapter extends BaseAdapter {
 
       // When fewer results returned or max page reached for query, rotate query
       if (videos.length === 0 || page >= 40) {
-        const nextQueryIdx = (queryIndex + 1) % QUERIES.length;
+        const nextQueryIdx = (queryIndex + 1) % PORNHUB_CATEGORY_QUERIES.length;
         nextCursor = { queryIndex: nextQueryIdx, page: 1 };
       } else {
         nextCursor = { queryIndex, page: page + 1 };
@@ -93,7 +104,7 @@ export class PornhubAdapter extends BaseAdapter {
       console.warn(`[pornhub] fetchVideos error: ${err.message}`);
       return {
         items: [],
-        nextCursor: { queryIndex: (queryIndex + 1) % QUERIES.length, page: 1 },
+        nextCursor: { queryIndex: (queryIndex + 1) % PORNHUB_CATEGORY_QUERIES.length, page: 1 },
         hasMore: true
       };
     }

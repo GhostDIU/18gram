@@ -65,23 +65,38 @@ export class SupabaseStorage {
     let totalCommitted = 0;
 
     for (let i = 0; i < videos.length; i += batchSize) {
-      const chunk = videos.slice(i, i + batchSize);
+      const rawChunk = videos.slice(i, i + batchSize);
       const nowIso = new Date().toISOString();
+
+      // Ensure deduplication within the chunk to prevent Postgres ON CONFLICT DO UPDATE error
+      const chunkMap = new Map();
+      for (const v of rawChunk) {
+        const key = v.dedupe_key || `${v.source_platform || v.source}:${v.external_id}`;
+        if (!chunkMap.has(key)) {
+          chunkMap.set(key, v);
+        }
+      }
+      const chunk = Array.from(chunkMap.values());
 
       // Ensure compact fields and valid dates
       const payload = chunk.map(v => ({
-        source: v.source,
+        source: v.source_platform || v.source,
+        source_platform: v.source_platform || v.source,
+        category: v.category || 'tik-tok',
+        is_nsfw: v.is_nsfw !== false,
         external_id: v.external_id,
         canonical_url: v.canonical_url,
-        dedupe_key: v.dedupe_key,
+        dedupe_key: v.dedupe_key || `${v.source_platform || v.source}:${v.external_id}`,
         video_url: v.video_url || null,
         embed_url: v.embed_url || null,
         title: (v.title || '').slice(0, 255),
-        poster_url: v.poster_url || null,
+        poster_url: v.poster_url || v.thumbnail_url || null,
+        thumbnail_url: v.thumbnail_url || v.poster_url || null,
         author: (v.author || '').slice(0, 100),
         tags: Array.isArray(v.tags) ? v.tags.slice(0, 10) : [],
         duration: v.duration || 0,
-        discovered_at: v.discovered_at || nowIso,
+        discovered_at: v.discovered_at || v.created_at || nowIso,
+        created_at: v.created_at || v.discovered_at || nowIso,
         last_seen_at: nowIso,
         is_available: v.is_available !== false
       }));

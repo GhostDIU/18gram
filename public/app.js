@@ -457,6 +457,22 @@
     loadFeed(true);
   };
 
+  // Helper to resolve platform branding
+  function getPlatformInfo(source) {
+    const s = String(source || '').toLowerCase();
+    if (s.includes('pornhub')) {
+      return { id: 'pornhub', name: 'Pornhub', badgeClass: 'badge-pornhub', icon: '🔞' };
+    } else if (s.includes('eporner')) {
+      return { id: 'eporner', name: 'Eporner', badgeClass: 'badge-eporner', icon: '⚡' };
+    } else if (s.includes('xhamster')) {
+      return { id: 'xhamster', name: 'xHamster', badgeClass: 'badge-xhamster', icon: '🐹' };
+    } else if (s.includes('xvideos')) {
+      return { id: 'xvideos', name: 'XVideos', badgeClass: 'badge-xvideos', icon: '🎬' };
+    } else {
+      return { id: 'redgifs', name: 'RedGifs', badgeClass: 'badge-redgifs', icon: '🔥' };
+    }
+  }
+
   // --- Create Single Reel Item Element ---
   function createReelElement(reel, index) {
     const isLiked = state.likedReels.has(reel.id);
@@ -467,8 +483,9 @@
     el.id = `reel-item-${index}`;
     el.dataset.index = index;
 
-    const sourceBadgeClass = reel.source === 'pornhub' ? 'badge-pornhub' : 'badge-redgifs';
-    const sourceLabel = reel.source === 'pornhub' ? 'Pornhub' : 'RedGifs';
+    const platform = getPlatformInfo(reel.source_platform || reel.source);
+    const sourceBadgeClass = platform.badgeClass;
+    const sourceLabel = platform.name;
 
     // Format tags
     const tagsHtml = (reel.tags || [])
@@ -478,18 +495,21 @@
 
     el.innerHTML = `
       <!-- Ambient Blurred Background (Eliminates Empty Space) -->
-      <div class="reel-ambient-bg" style="background-image: url('${reel.poster || ''}');"></div>
+      <div class="reel-ambient-bg" style="background-image: url('${reel.poster || reel.thumbnail_url || ''}');"></div>
 
       <!-- Main Video Container -->
       <div class="reel-video-wrapper">
         ${
           reel.type === 'embed'
-            ? `<iframe class="reel-iframe" src="${reel.videoUrl}" allowfullscreen allow="autoplay"></iframe>`
+            ? `<div class="iframe-wrapper">
+                <iframe class="reel-iframe" src="${reel.videoUrl}" allowfullscreen allow="autoplay; encrypted-media"></iframe>
+                <div class="iframe-touch-layer" title="Swipe to scroll"></div>
+              </div>`
             : `<video class="reel-video" 
                 playsinline 
                 loop 
                 preload="${index < 2 ? 'auto' : 'none'}" 
-                poster="${reel.poster || ''}"
+                poster="${reel.poster || reel.thumbnail_url || ''}"
                 src="${reel.videoUrl}">
               </video>`
         }
@@ -524,7 +544,7 @@
 
         <!-- External Source Web Link -->
         <div class="action-btn-wrap">
-          <a href="${reel.webUrl}" target="_blank" rel="noopener noreferrer" class="action-btn btn-source" title="View on ${reel.sourceName}">
+          <a href="${reel.webUrl}" target="_blank" rel="noopener noreferrer" class="action-btn btn-source" title="View on ${sourceLabel}">
             <i data-lucide="external-link"></i>
           </a>
           <span class="action-count">${sourceLabel}</span>
@@ -536,7 +556,7 @@
         <div class="creator-row">
           <div class="creator-avatar">${reel.author.replace('@', '').charAt(0).toUpperCase()}</div>
           <span class="creator-username">${reel.author}</span>
-          <span class="source-badge ${sourceBadgeClass}">${sourceLabel}</span>
+          <span class="source-badge ${sourceBadgeClass}">${platform.name}</span>
         </div>
 
         <div class="caption-text">${escapeHtml(reel.title)}</div>
@@ -569,6 +589,23 @@
     const countLikes = el.querySelector('.count-likes');
     const btnBookmark = el.querySelector('.btn-bookmark');
     const btnShare = el.querySelector('.btn-share');
+
+    // Smooth vertical swipe gesture support across iframes
+    const iframeTouchLayer = el.querySelector('.iframe-touch-layer');
+    if (iframeTouchLayer) {
+      let touchStartY = 0;
+      iframeTouchLayer.addEventListener('touchstart', (e) => {
+        touchStartY = e.touches[0].clientY;
+      }, { passive: true });
+
+      iframeTouchLayer.addEventListener('touchmove', (e) => {
+        const currentY = e.touches[0].clientY;
+        const deltaY = currentY - touchStartY;
+        if (Math.abs(deltaY) > 8 && reelsContainer) {
+          reelsContainer.scrollTop -= deltaY * 0.5;
+        }
+      }, { passive: true });
+    }
 
     // Progress Bar Listener
     if (video) {
@@ -793,8 +830,9 @@
     if (nowPlayingUsername) {
       nowPlayingAvatar.textContent = reel.author.replace('@', '').charAt(0).toUpperCase();
       nowPlayingUsername.textContent = reel.author;
-      nowPlayingBadge.className = `source-badge ${reel.source === 'pornhub' ? 'badge-pornhub' : 'badge-redgifs'}`;
-      nowPlayingBadge.textContent = reel.sourceName;
+      const platform = getPlatformInfo(reel.source_platform || reel.source);
+      nowPlayingBadge.className = `source-badge ${platform.badgeClass}`;
+      nowPlayingBadge.textContent = platform.name;
       nowPlayingCaption.textContent = reel.title;
 
       nowPlayingTags.innerHTML = (reel.tags || [])

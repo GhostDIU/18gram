@@ -183,6 +183,92 @@ async function fetchPornhub({ query = '', page = 1, count = 10 }) {
   }
 }
 
+// Fetch Eporner 18+ Videos / Shorts
+async function fetchEporner({ query = 'vertical', page = 1, count = 12 }) {
+  const url = `https://www.eporner.com/api/v2/web/search/?query=${encodeURIComponent(query)}&per_page=${count}&page=${page}&thumbsize=big&order=latest&format=json`;
+
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 6000);
+
+    const res = await fetch(url, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: controller.signal
+    });
+    clearTimeout(timeout);
+
+    if (!res.ok) return [];
+    const data = await res.json();
+    const videos = data.videos || [];
+
+    return videos.map(v => {
+      const rawKeywords = typeof v.keywords === 'string' ? v.keywords.split(',') : [];
+      const poster = v.default_thumb?.src || (Array.isArray(v.thumbs) && v.thumbs[0]?.src) || null;
+
+      return {
+        id: `ep_${v.id}`,
+        rawId: String(v.id),
+        source: 'eporner',
+        source_platform: 'eporner',
+        sourceName: 'Eporner',
+        author: '@eporner_creator',
+        title: v.title || 'Eporner Video',
+        videoUrl: v.embed || `https://www.eporner.com/embed/${v.id}/`,
+        poster: poster,
+        hasAudio: true,
+        likes: Math.floor(Math.random() * 600) + 80,
+        views: v.views || 0,
+        duration: parseInt(v.length_sec, 10) || 0,
+        width: 1080,
+        height: 1920,
+        isVertical: true,
+        tags: rawKeywords.slice(0, 4),
+        type: 'embed',
+        webUrl: v.url || `https://www.eporner.com/video-${v.id}/`
+      };
+    });
+  } catch (err) {
+    console.warn('[server] Eporner fetch error:', err.message);
+    return [];
+  }
+}
+
+// Multi-platform live fallback aggregator
+async function fetchMultiPlatformLive({ category = 'tik-tok', query = '', page = 1, count = 20 }) {
+  const results = [];
+  const promises = [];
+
+  // 1. RedGifs fetch (unless strictly pornhub category)
+  if (category !== 'pornhub') {
+    promises.push(
+      fetchRedGifs({ niche: category, query, page, count: 12 })
+        .then(items => results.push(...items))
+        .catch(() => {})
+    );
+  }
+
+  // 2. Pornhub fetch
+  const phQuery = query || (category === 'pornhub' ? 'shorties' : `shorties ${category.replace('-', ' ')}`);
+  promises.push(
+    fetchPornhub({ query: phQuery, page, count: 10 })
+      .then(items => results.push(...items))
+      .catch(() => {})
+  );
+
+  // 3. Eporner fetch (unless strictly pornhub category)
+  if (category !== 'pornhub') {
+    const epQuery = query || `${category.replace('-', ' ')} vertical`;
+    promises.push(
+      fetchEporner({ query: epQuery, page, count: 10 })
+        .then(items => results.push(...items))
+        .catch(() => {})
+    );
+  }
+
+  await Promise.allSettled(promises);
+  return results;
+}
+
 // Curated Niches / Categories
 const CURATED_NICHES = [
   { id: 'tik-tok', name: 'TikTok & Reels', icon: '🎵', count: '250K+' },
@@ -285,23 +371,23 @@ app.get('/api/reels', async (req, res) => {
         .eq('is_available', true);
 
       if (effectiveSource) {
-        q = q.eq('source', effectiveSource);
+        q = q.or(`source.eq.${effectiveSource},source_platform.eq.${effectiveSource}`);
       }
 
-      // Filter by category tags in Supabase if specific niche selected
-      if (!isPornhubNiche && nicheConfig && Array.isArray(nicheConfig.tags) && niche !== 'all' && niche !== 'tik-tok') {
-        q = q.overlaps('tags', nicheConfig.tags);
+      // Filter by category in Supabase
+      if (niche && niche !== 'all') {
+        q = q.eq('category', niche);
       }
 
       if (query && query.trim().length > 0) {
         q = q.ilike('title', `%${query.trim()}%`);
       }
 
-      // Fetch a larger candidate pool so we can exclude seen reels and shuffle for freshness
-      const poolLimit = pageNum === 1 ? 80 : 50;
+      // Fetch candidate pool so we can exclude seen reels and ensure a multi-platform mix
+      const poolLimit = pageNum === 1 ? 90 : 60;
       const offset = (pageNum - 1) * pageSize;
       const { data, error } = await q
-        .order('discovered_at', { ascending: false })
+        .order('created_at', { ascending: false })
         .range(offset, offset + poolLimit);
 
       if (!error && Array.isArray(data) && data.length > 0) {
@@ -309,41 +395,66 @@ app.get('/api/reels', async (req, res) => {
         const unseenData = data.filter(v =>
           !excludedSet.has(String(v.id)) &&
           !excludedSet.has(String(v.external_id)) &&
-          !excludedSet.has(`${v.source}:${v.external_id}`)
+          !excludedSet.has(`${v.source_platform || v.source}:${v.external_id}`)
         );
 
-        // Shuffle unseen candidate videos on page 1 for fresh discovery on every refresh
-        const candidatePool = pageNum === 1 ? shuffleArray(unseenData) : unseenData;
+        // Group by platform to interleave and ensure multi-platform diversity
+        const byPlatform = {};
+        for (const item of unseenData) {
+          const plat = item.source_platform || item.source || 'redgifs';
+          if (!byPlatform[plat]) byPlatform[plat] = [];
+          byPlatform[plat].push(item);
+        }
 
-        reels = candidatePool.slice(0, pageSize).map(v => ({
-          id: `db_${v.id}`,
-          rawId: v.external_id,
-          source: v.source,
-          sourceName: v.source.toUpperCase(),
-          author: v.author || `@${v.source}`,
-          title: v.title || `${v.source} reel`,
-          videoUrl: v.video_url || v.embed_url,
-          sdUrl: v.video_url,
-          embedUrl: v.embed_url,
-          poster: v.poster_url,
-          hasAudio: true,
-          likes: Math.floor(Math.random() * 800) + 120,
-          views: Math.floor(Math.random() * 8000) + 500,
-          duration: v.duration || 0,
-          width: 1080,
-          height: 1920,
-          isVertical: true,
-          tags: v.tags || [],
-          type: v.video_url ? 'mp4' : 'embed',
-          webUrl: v.canonical_url
-        }));
+        // Interleave across platforms (e.g. RedGifs, Pornhub, Eporner)
+        const interleaved = [];
+        const platKeys = Object.keys(byPlatform);
+        let maxLen = Math.max(...platKeys.map(k => byPlatform[k].length), 0);
+        for (let i = 0; i < maxLen; i++) {
+          for (const k of platKeys) {
+            if (byPlatform[k][i]) interleaved.push(byPlatform[k][i]);
+          }
+        }
+
+        // Shuffle candidate pool on page 1 for fresh discovery
+        const candidatePool = pageNum === 1 ? shuffleArray(interleaved) : interleaved;
+
+        reels = candidatePool.slice(0, pageSize).map(v => {
+          const platform = v.source_platform || v.source || 'redgifs';
+          return {
+            id: `db_${v.id}`,
+            rawId: v.external_id,
+            source: platform,
+            source_platform: platform,
+            sourceName: platform.toUpperCase(),
+            category: v.category || niche,
+            is_nsfw: v.is_nsfw !== false,
+            author: v.author || `@${platform}`,
+            title: v.title || `${platform} reel`,
+            videoUrl: v.video_url || v.embed_url,
+            sdUrl: v.video_url,
+            embedUrl: v.embed_url,
+            poster: v.thumbnail_url || v.poster_url,
+            thumbnail_url: v.thumbnail_url || v.poster_url,
+            hasAudio: true,
+            likes: Math.floor(Math.random() * 800) + 120,
+            views: Math.floor(Math.random() * 8000) + 500,
+            duration: v.duration || 0,
+            width: 1080,
+            height: 1920,
+            isVertical: true,
+            tags: v.tags || [],
+            type: v.video_url ? 'mp4' : 'embed',
+            webUrl: v.canonical_url
+          };
+        });
       }
     } catch (err) {
       console.warn('[server] Supabase read failed, falling back to live fetch:', err.message);
     }
   }
 
-  // 2. If fewer than 10 category-specific reels from database, supplement or fallback to live provider fetch
+  // 2. If fewer than 10 category-specific reels from database, supplement with multi-platform live fetch
   if (reels.length < 10) {
     const existingRawIds = new Set(reels.map(r => r.rawId));
     // Use dynamic page offset on page 1 so fresh reels appear on every refresh
@@ -357,7 +468,7 @@ app.get('/api/reels', async (req, res) => {
         liveItems = await fetchRedGifs({ niche: 'amateur-girls', query: query || 'shorts', page: livePage, count: 18 });
       }
     } else {
-      liveItems = await fetchRedGifs({ niche, query, page: livePage, count: 20 });
+      liveItems = await fetchMultiPlatformLive({ category: niche, query, page: livePage, count: 20 });
     }
 
     // Filter out already seen or already selected reels

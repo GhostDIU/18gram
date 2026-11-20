@@ -126,6 +126,9 @@ export class BaseAdapter {
 
     return {
       source: this.name,
+      source_platform: this.name,
+      category: raw.category || 'tik-tok',
+      is_nsfw: true,
       external_id: externalId,
       canonical_url: canonicalUrl,
       dedupe_key: dedupeKey,
@@ -133,10 +136,12 @@ export class BaseAdapter {
       embed_url: raw.embed_url || raw.embedUrl || null,
       title: title || `${this.name.toUpperCase()} Reel #${externalId}`,
       poster_url: raw.poster_url || raw.poster || raw.thumbnail || null,
+      thumbnail_url: raw.thumbnail_url || raw.poster_url || raw.poster || raw.thumbnail || null,
       author: author || `@${this.name}`,
       tags,
       duration: Number.isInteger(raw.duration) ? raw.duration : Math.round(Number(raw.duration) || 0),
-      is_available: raw.is_available !== false
+      is_available: raw.is_available !== false,
+      created_at: raw.created_at || new Date().toISOString()
     };
   }
 
