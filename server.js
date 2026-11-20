@@ -196,6 +196,45 @@ const CURATED_NICHES = [
   { id: 'pornhub', name: 'Pornhub Shorts', icon: '🔞', count: 'Shorties' },
 ];
 
+const NICHE_MAP = {
+  'tik-tok': {
+    tags: ['tiktok', 'reels', 'dance', 'trend', 'trends', 'viral', 'short', 'tok', 'tiktoker'],
+    source: 'redgifs'
+  },
+  'amateur-girls': {
+    tags: ['amateur', 'homemade', 'verified', 'real', 'amateur-girls', 'girlfriend', 'selfie', 'amateurcouple'],
+    source: 'redgifs'
+  },
+  'nsfw-cosplay': {
+    tags: ['cosplay', 'anime', 'costume', 'waifu', 'nsfw-cosplay', 'genshin', 'gamer', 'cosplayer'],
+    source: 'redgifs'
+  },
+  'thick-booty': {
+    tags: ['booty', 'thick', 'ass', 'pawg', 'curvy', 'thick-booty', 'bubble', 'bigass', 'twerk', 'twerking'],
+    source: 'redgifs'
+  },
+  'fit-girls': {
+    tags: ['fit', 'athletic', 'gym', 'muscle', 'abs', 'fitness', 'fit-girls', 'workout', 'yoga', 'sporty'],
+    source: 'redgifs'
+  },
+  'latinas': {
+    tags: ['latina', 'latinas', 'spanish', 'colombian', 'brazilian', 'mexican', 'hispanic'],
+    source: 'redgifs'
+  },
+  'busty-asians': {
+    tags: ['asian', 'japanese', 'korean', 'chinese', 'busty-asians', 'oriental', 'filipina'],
+    source: 'redgifs'
+  },
+  'goth-girls': {
+    tags: ['goth', 'egirl', 'e-girl', 'punk', 'alt', 'goth-girls', 'emo', 'tattoos', 'tattoo', 'tattooed', 'piercing', 'pierced'],
+    source: 'redgifs'
+  },
+  'pornhub': {
+    tags: ['pornhub', 'shorties', 'shorts'],
+    source: 'pornhub'
+  }
+};
+
 // API: Get Curated Categories / Niches
 app.get('/api/niches', (req, res) => {
   res.json({ success: true, niches: CURATED_NICHES });
@@ -231,6 +270,10 @@ app.get('/api/reels', async (req, res) => {
       : []
   );
 
+  const isPornhubNiche = niche === 'pornhub' || source === 'pornhub';
+  const effectiveSource = isPornhubNiche ? 'pornhub' : (source !== 'all' ? source : null);
+  const nicheConfig = NICHE_MAP[niche];
+
   let reels = [];
 
   // 1. Try reading from pre-discovered Supabase videos if configured
@@ -241,9 +284,15 @@ app.get('/api/reels', async (req, res) => {
         .select('*')
         .eq('is_available', true);
 
-      if (source !== 'all') {
-        q = q.eq('source', source);
+      if (effectiveSource) {
+        q = q.eq('source', effectiveSource);
       }
+
+      // Filter by category tags in Supabase if specific niche selected
+      if (!isPornhubNiche && nicheConfig && Array.isArray(nicheConfig.tags) && niche !== 'all' && niche !== 'tik-tok') {
+        q = q.overlaps('tags', nicheConfig.tags);
+      }
+
       if (query && query.trim().length > 0) {
         q = q.ilike('title', `%${query.trim()}%`);
       }
@@ -294,27 +343,21 @@ app.get('/api/reels', async (req, res) => {
     }
   }
 
-  // 2. If fewer than 8 unseen reels from database, supplement or fallback to live provider fetch
-  if (reels.length < 8) {
+  // 2. If fewer than 10 category-specific reels from database, supplement or fallback to live provider fetch
+  if (reels.length < 10) {
     const existingRawIds = new Set(reels.map(r => r.rawId));
     // Use dynamic page offset on page 1 so fresh reels appear on every refresh
-    const livePage = pageNum === 1 ? Math.floor(Math.random() * 6) + 1 : pageNum;
+    const livePage = pageNum === 1 ? Math.floor(Math.random() * 5) + 1 : pageNum;
 
     let liveItems = [];
-    if (source === 'pornhub' || niche === 'pornhub') {
-      liveItems = await fetchPornhub({ query, page: livePage, count: 15 });
-    } else if (source === 'redgifs') {
-      liveItems = await fetchRedGifs({ niche, query, page: livePage, count: 18 });
-    } else {
-      const redGifsItems = await fetchRedGifs({ niche, query, page: livePage, count: 18 });
-      liveItems = redGifsItems;
-
-      if (pageNum === 1 && !niche.startsWith('tik-tok') && query) {
-        const phItems = await fetchPornhub({ query, page: livePage, count: 4 });
-        if (phItems.length) {
-          liveItems = [...liveItems, ...phItems];
-        }
+    if (isPornhubNiche) {
+      liveItems = await fetchPornhub({ query: query || 'shorties', page: livePage, count: 18 });
+      // If Pornhub is geo-blocked or unreachable, gracefully fallback to RedGifs
+      if (liveItems.length === 0) {
+        liveItems = await fetchRedGifs({ niche: 'amateur-girls', query: query || 'shorts', page: livePage, count: 18 });
       }
+    } else {
+      liveItems = await fetchRedGifs({ niche, query, page: livePage, count: 20 });
     }
 
     // Filter out already seen or already selected reels

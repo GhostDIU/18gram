@@ -247,7 +247,15 @@
   }
 
   function selectNiche(nicheId) {
-    if (state.currentNiche === nicheId && !state.currentQuery && state.viewMode === 'feed') return;
+    if (state.currentNiche === nicheId && !state.currentQuery && state.viewMode === 'feed') {
+      if (reelsContainer) reelsContainer.scrollTo({ top: 0, behavior: 'smooth' });
+      return;
+    }
+
+    // Stop any playing video from previous category
+    document.querySelectorAll('video').forEach(v => {
+      try { v.pause(); v.src = ''; } catch (e) {}
+    });
 
     state.currentNiche = nicheId;
     state.currentQuery = '';
@@ -256,6 +264,7 @@
     state.viewMode = 'feed';
     state.reelsData = [];
     state.renderedReelIds.clear();
+    state.currentVisibleIndex = -1;
 
     // Sync Top Pills UI
     document.querySelectorAll('.pill-item').forEach(pill => {
@@ -274,6 +283,13 @@
     btnBookmarksTab.classList.remove('active');
 
     hideFilterBanner();
+
+    // Reset scroll position immediately
+    if (reelsContainer) {
+      reelsContainer.scrollTop = 0;
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
+
     loadFeed(true);
   }
 
@@ -288,6 +304,9 @@
       state.renderedReelIds.clear();
       state.hasMore = true;
       state.currentVisibleIndex = -1;
+      if (reelsContainer) {
+        reelsContainer.scrollTop = 0;
+      }
       reelsContainer.innerHTML = `
         <div class="loader-container">
           <div class="spinner"></div>
@@ -322,6 +341,9 @@
 
       if (reset) {
         reelsContainer.innerHTML = '';
+        if (reelsContainer) {
+          reelsContainer.scrollTop = 0;
+        }
       }
 
       const incoming = data.reels || [];
@@ -345,7 +367,14 @@
 
       // Handle exhaustion: if zero unseen reels returned
       if (freshReels.length === 0) {
-        // If the user has seen everything and the feed is completely empty on reset:
+        // If on initial reset or infinite scroll, try fetching next page if under page 5
+        if (incoming.length > 0 && state.currentPage < 5) {
+          state.currentPage++;
+          state.isLoading = false;
+          return loadFeed(reset);
+        }
+
+        // If the user has truly watched everything available across this feed:
         if (state.reelsData.length === 0 && state.seenReels.size > 0 && reset) {
           console.log('[feed] All available reels watched. Gracefully resetting seen history and reshuffling...');
           state.seenReels.clear();
@@ -939,12 +968,18 @@
     state.viewMode = 'feed';
     state.reelsData = [];
     state.renderedReelIds.clear();
+    state.currentVisibleIndex = -1;
 
     // Clear active category highlights
     document.querySelectorAll('.pill-item').forEach(p => p.classList.remove('active'));
     document.querySelectorAll('.sidebar-niche-btn').forEach(b => b.classList.remove('active'));
     btnBookmarksTab.classList.remove('active');
     if (navSaved) navSaved.classList.remove('active');
+
+    if (reelsContainer) {
+      reelsContainer.scrollTop = 0;
+    }
+    window.scrollTo({ top: 0, behavior: 'instant' });
 
     showFilterBanner(`Search: "${query}"`);
     loadFeed(true);
