@@ -1,5 +1,11 @@
 node_modules/
 .DS_Store
 .env
+.env.*
+.env.local
+.vercel
 data/bookmarks.json
 npm-debug.log*
+18gram
+18gram.zip
+coverage/

@@ -567,6 +567,9 @@
     }
 
     localStorage.setItem('18gram_saved_reels', JSON.stringify(state.savedReels));
+    if (window.BookmarkDB) {
+      window.BookmarkDB.toggle(reel).catch(() => {});
+    }
     updateSavedCounts();
 
     try {
@@ -915,6 +918,14 @@
 
   // --- Main App Initialization ---
   function initApp() {
+    if (window.BookmarkDB) {
+      window.BookmarkDB.getAll().then(saved => {
+        if (saved && saved.length > 0) {
+          state.savedReels = saved;
+          updateSavedCounts();
+        }
+      }).catch(() => {});
+    }
     loadCategories();
     initPillScrollControls();
     loadFeed(true);

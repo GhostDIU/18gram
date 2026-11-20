@@ -1,13 +1,22 @@
+import 'dotenv/config';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import { createClient } from '@supabase/supabase-js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+
+// Optional Supabase client for reading pre-collected discovery videos
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY || process.env.SUPABASE_KEY;
+const supabase = (SUPABASE_URL && SUPABASE_KEY)
+  ? createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false } })
+  : null;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
@@ -192,27 +201,78 @@ app.get('/api/niches', (req, res) => {
   res.json({ success: true, niches: CURATED_NICHES });
 });
 
-// API: Get Reels
+// API: Get Reels (Reads from Supabase Discovery Engine when available, with live fallback)
 app.get('/api/reels', async (req, res) => {
   const { source = 'all', niche = 'tik-tok', query = '', page = 1 } = req.query;
   const pageNum = Math.max(1, parseInt(page, 10) || 1);
+  const pageSize = 15;
 
   let reels = [];
 
-  if (source === 'pornhub' || niche === 'pornhub') {
-    reels = await fetchPornhub({ query, page: pageNum, count: 12 });
-  } else if (source === 'redgifs') {
-    reels = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
-  } else {
-    // Default 'all': Fetch RedGifs as primary for seamless vertical MP4 reels
-    const redGifsItems = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
-    reels = redGifsItems;
+  // 1. Try reading from pre-discovered Supabase videos if configured
+  if (supabase) {
+    try {
+      let q = supabase
+        .from('videos')
+        .select('*')
+        .eq('is_available', true)
+        .order('discovered_at', { ascending: false });
 
-    // If on page 1 or query search, optionally include a couple Pornhub shorties at intervals
-    if (pageNum === 1 && !niche.startsWith('tik-tok') && query) {
-      const phItems = await fetchPornhub({ query, page: 1, count: 4 });
-      if (phItems.length) {
-        reels = [...reels, ...phItems];
+      if (source !== 'all') {
+        q = q.eq('source', source);
+      }
+      if (query && query.trim().length > 0) {
+        q = q.ilike('title', `%${query.trim()}%`);
+      }
+
+      const from = (pageNum - 1) * pageSize;
+      const to = from + pageSize - 1;
+      const { data, error } = await q.range(from, to);
+
+      if (!error && Array.isArray(data) && data.length > 0) {
+        reels = data.map(v => ({
+          id: `db_${v.id}`,
+          rawId: v.external_id,
+          source: v.source,
+          sourceName: v.source.toUpperCase(),
+          author: v.author || `@${v.source}`,
+          title: v.title || `${v.source} reel`,
+          videoUrl: v.video_url || v.embed_url,
+          sdUrl: v.video_url,
+          embedUrl: v.embed_url,
+          poster: v.poster_url,
+          hasAudio: true,
+          likes: Math.floor(Math.random() * 800) + 120,
+          views: Math.floor(Math.random() * 8000) + 500,
+          duration: v.duration || 0,
+          width: 1080,
+          height: 1920,
+          isVertical: true,
+          tags: v.tags || [],
+          type: v.video_url ? 'mp4' : 'embed',
+          webUrl: v.canonical_url
+        }));
+      }
+    } catch (err) {
+      console.warn('[server] Supabase read failed, falling back to live fetch:', err.message);
+    }
+  }
+
+  // 2. If no database records found, fallback to live provider fetch
+  if (reels.length === 0) {
+    if (source === 'pornhub' || niche === 'pornhub') {
+      reels = await fetchPornhub({ query, page: pageNum, count: 12 });
+    } else if (source === 'redgifs') {
+      reels = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
+    } else {
+      const redGifsItems = await fetchRedGifs({ niche, query, page: pageNum, count: 15 });
+      reels = redGifsItems;
+
+      if (pageNum === 1 && !niche.startsWith('tik-tok') && query) {
+        const phItems = await fetchPornhub({ query, page: 1, count: 4 });
+        if (phItems.length) {
+          reels = [...reels, ...phItems];
+        }
       }
     }
   }
@@ -228,8 +288,55 @@ app.get('/api/reels', async (req, res) => {
   });
 });
 
-// API: Bookmarks
-app.get('/api/bookmarks', (req, res) => {
+// API: Discovery Storage Health
+app.get('/api/discovery/health', async (req, res) => {
+  if (!supabase) {
+    return res.json({ success: false, message: 'Supabase not configured' });
+  }
+  try {
+    const { data, error } = await supabase.rpc('get_storage_health');
+    if (error) throw error;
+    res.json({ success: true, health: data?.[0] || null });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// API: Recent Discovery Collection Runs
+app.get('/api/discovery/runs', async (req, res) => {
+  if (!supabase) {
+    return res.json({ success: false, message: 'Supabase not configured' });
+  }
+  try {
+    const { data, error } = await supabase
+      .from('collection_runs')
+      .select('*')
+      .order('started_at', { ascending: false })
+      .limit(20);
+    if (error) throw error;
+    res.json({ success: true, runs: data || [] });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// API: Bookmarks (Backed by Supabase bookmarks table with local fallback)
+app.get('/api/bookmarks', async (req, res) => {
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('bookmarks')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!error && Array.isArray(data)) {
+        return res.json({ success: true, bookmarks: data.map(b => b.reel_data) });
+      }
+    } catch (err) {
+      console.warn('[server] Supabase bookmarks read error, falling back to local file:', err.message);
+    }
+  }
+
   try {
     const raw = fs.readFileSync(bookmarksFile, 'utf8');
     res.json({ success: true, bookmarks: JSON.parse(raw) });
@@ -238,24 +345,51 @@ app.get('/api/bookmarks', (req, res) => {
   }
 });
 
-app.post('/api/bookmarks', (req, res) => {
-  try {
-    const reel = req.body;
-    if (!reel || !reel.id) {
-      return res.status(400).json({ success: false, message: 'Invalid reel item' });
+app.post('/api/bookmarks', async (req, res) => {
+  const reel = req.body;
+  if (!reel || !reel.id) {
+    return res.status(400).json({ success: false, message: 'Invalid reel item' });
+  }
+
+  let saved = false;
+  let count = 0;
+
+  if (supabase) {
+    try {
+      const { data: existing } = await supabase
+        .from('bookmarks')
+        .select('id')
+        .eq('id', String(reel.id))
+        .maybeSingle();
+
+      if (existing) {
+        await supabase.from('bookmarks').delete().eq('id', String(reel.id));
+        saved = false;
+      } else {
+        await supabase.from('bookmarks').upsert([
+          { id: String(reel.id), reel_data: reel, updated_at: new Date().toISOString() }
+        ]);
+        saved = true;
+      }
+
+      const { count: total } = await supabase.from('bookmarks').select('*', { count: 'exact', head: true });
+      count = total || 0;
+      return res.json({ success: true, saved, count });
+    } catch (err) {
+      console.warn('[server] Supabase bookmarks write error, falling back to local file:', err.message);
     }
+  }
+
+  try {
     const raw = fs.readFileSync(bookmarksFile, 'utf8');
     let bookmarks = JSON.parse(raw);
 
     const existingIndex = bookmarks.findIndex(b => b.id === reel.id);
-    let saved = false;
 
     if (existingIndex >= 0) {
-      // Remove if already saved
       bookmarks.splice(existingIndex, 1);
       saved = false;
     } else {
-      // Add to front
       bookmarks.unshift(reel);
       saved = true;
     }
@@ -272,6 +406,10 @@ app.use((req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-app.listen(PORT, '0.0.0.0', () => {
-  console.log(`🔥 18gram server running at http://localhost:${PORT}`);
-});
+if (process.env.VERCEL !== '1') {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🔥 18gram server running at http://localhost:${PORT}`);
+  });
+}
+
+export default app;
